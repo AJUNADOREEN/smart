@@ -27,22 +27,12 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-0npl)as65*a+7_
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-import re
-
 ALLOWED_HOSTS = [
-    h.strip()
-    for h in re.split(r'[,\s]+', os.environ.get('ALLOWED_HOSTS', 'localhost 127.0.0.1 web-production-9b27a.up.railway.app'))
-    if h.strip()
+    'localhost',
+    '127.0.0.1',
+    'web-production-2c36d.up.railway.app',
+    'ssemujjusharif567-cmd.github.io',
 ]
-
-# Strip protocol and path — keep hostname only
-ALLOWED_HOSTS = [
-    re.sub(r'^https?://', '', h).split('/')[0]
-    for h in ALLOWED_HOSTS
-]
-
-if not DEBUG and not os.environ.get('ALLOWED_HOSTS'):
-    ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -69,13 +59,15 @@ CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://localhost:5174',
     'https://ssemujjusharif567-cmd.github.io',
+    'https://web-production-2c36d.up.railway.app',
 ]
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
-    re.sub(r'/$', '', h.strip())
-    for h in re.split(r'[,\s]+', os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://localhost:5173 http://localhost:5174 https://web-production-9b27a.up.railway.app https://ssemujjusharif567-cmd.github.io'))
-    if h.strip()
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'https://web-production-2c36d.up.railway.app',
+    'https://ssemujjusharif567-cmd.github.io',
 ]
 SESSION_COOKIE_SAMESITE = os.environ.get('SESSION_COOKIE_SAMESITE', 'Lax')
 SESSION_COOKIE_HTTPONLY = True
@@ -133,18 +125,10 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASE_URL = os.environ.get('DATABASE_URL')
-if DATABASE_URL:
-    DATABASES = {
-        'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600)
-    }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://postgres:KTXxNKUhHpRgnvdnQeLSwyUfNSMpVYED@postgres.railway.internal:5432/railway')
+DATABASES = {
+    'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600)
+}
 
 
 # Password validation
