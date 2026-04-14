@@ -7,7 +7,7 @@ from .serializers import DeviceSerializer, DeviceDetailSerializer, DeviceSensorR
 from apps.alerts.utils import create_alert
 
 
-class DeviceList(generics.ListAPIView):
+class DeviceList(generics.ListCreateAPIView):
     queryset         = Device.objects.prefetch_related('readings')
     serializer_class = DeviceSerializer
 
