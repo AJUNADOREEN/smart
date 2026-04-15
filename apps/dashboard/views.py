@@ -43,41 +43,51 @@ def kpi_list(request):
         diff = ((now or 0) - (prev or 0)) / (prev or 1) * 100
         return f"{'+' if diff >= 0 else ''}{diff:.0f}%"
 
-    # Average soap/water level from latest device readings
-    latest = DeviceSensorReading.objects.order_by('device', '-timestamp').distinct('device')
-    avg_soap  = latest.aggregate(v=Avg('soap_level'))['v'] or 0
-    avg_water = latest.aggregate(v=Avg('water_level'))['v'] or 0
+    # Latest reading per device — subquery approach, works on all DBs
+    from django.db.models import Max
+    latest_ids = (
+        DeviceSensorReading.objects
+        .values('device')
+        .annotate(latest=Max('id'))
+        .values_list('latest', flat=True)
+    )
+    latest_qs = DeviceSensorReading.objects.filter(id__in=latest_ids)
+    avg_soap  = latest_qs.aggregate(v=Avg('soap_level'))['v'] or 0
+    avg_water = latest_qs.aggregate(v=Avg('water_level'))['v'] or 0
 
     handwashes = t['washed'] or 0
     unwashed   = t['unwashed'] or 0
     water_used = t['water'] or 0
 
     return Response([
-        {'label': 'Handwashes Today', 'value': str(handwashes),        'change': pct_change(handwashes, y['washed']),  'up': handwashes >= (y['washed'] or 0),  'color': '#10b981'},
-        {'label': 'Soap Remaining',   'value': f"{avg_soap:.0f}%",     'change': '-',                                  'up': avg_soap > 30,                     'color': '#6366f1'},
-        {'label': 'Water Used (L)',   'value': f"{water_used:.0f}",    'change': pct_change(water_used, y['water']),   'up': True,                              'color': '#0ea5e9'},
-        {'label': 'Left Unwashed',    'value': str(unwashed),           'change': pct_change(unwashed, y['unwashed']),  'up': unwashed <= (y['unwashed'] or 0),  'color': '#ef4444'},
+        {'label': 'Handwashes Today', 'value': str(handwashes),      'change': pct_change(handwashes, y['washed']),  'up': handwashes >= (y['washed'] or 0), 'color': '#10b981'},
+        {'label': 'Soap Remaining',   'value': f"{avg_soap:.0f}%",   'change': '-',                                  'up': avg_soap > 30,                    'color': '#6366f1'},
+        {'label': 'Water Used (L)',   'value': f"{water_used:.0f}",  'change': pct_change(water_used, y['water']),   'up': True,                             'color': '#0ea5e9'},
+        {'label': 'Left Unwashed',    'value': str(unwashed),         'change': pct_change(unwashed, y['unwashed']),  'up': unwashed <= (y['unwashed'] or 0), 'color': '#ef4444'},
     ])
 
 
 @api_view(['GET'])
 def sensor_list(request):
-    latest = (
+    from django.db.models import Max
+    latest_ids = (
         DeviceSensorReading.objects
-        .order_by('device', '-timestamp')
-        .distinct('device')
+        .values('device')
+        .annotate(latest=Max('id'))
+        .values_list('latest', flat=True)
     )
-    avg_water = latest.aggregate(v=Avg('water_level'))['v'] or 0
-    avg_soap  = latest.aggregate(v=Avg('soap_level'))['v'] or 0
-    avg_temp  = latest.aggregate(v=Avg('temperature'))['v'] or 0
+    latest_qs  = DeviceSensorReading.objects.filter(id__in=latest_ids)
+    avg_water  = latest_qs.aggregate(v=Avg('water_level'))['v'] or 0
+    avg_soap   = latest_qs.aggregate(v=Avg('soap_level'))['v'] or 0
+    avg_temp   = latest_qs.aggregate(v=Avg('temperature'))['v'] or 0
     handwashes = SensorReading.objects.filter(date=date.today()).aggregate(v=Sum('handwashes'))['v'] or 0
     max_washes = 500
 
     return Response([
-        {'label': 'Water Level',     'value': f"{avg_water:.0f}%",  'pct': int(avg_water),              'color': '#0ea5e9'},
-        {'label': 'Soap Level',      'value': f"{avg_soap:.0f}%",   'pct': int(avg_soap),               'color': '#6366f1'},
-        {'label': 'Temperature',     'value': f"{avg_temp:.1f}\u00b0C", 'pct': int(avg_temp / 50 * 100), 'color': '#f59e0b'},
-        {'label': 'Handwash Count',  'value': str(handwashes),      'pct': min(int(handwashes / max_washes * 100), 100), 'color': '#10b981'},
+        {'label': 'Water Level',    'value': f"{avg_water:.0f}%",       'pct': int(avg_water),                                    'color': '#0ea5e9'},
+        {'label': 'Soap Level',     'value': f"{avg_soap:.0f}%",        'pct': int(avg_soap),                                     'color': '#6366f1'},
+        {'label': 'Temperature',    'value': f"{avg_temp:.1f}\u00b0C",  'pct': int(avg_temp / 50 * 100),                          'color': '#f59e0b'},
+        {'label': 'Handwash Count', 'value': str(handwashes),           'pct': min(int(handwashes / max_washes * 100), 100),      'color': '#10b981'},
     ])
 
 
