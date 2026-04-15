@@ -1,5 +1,7 @@
-from datetime import date, timedelta
-from django.db.models import Sum
+from datetime import datetime, date, time, timedelta
+from django.db.models import Sum, Q, DateTimeField
+from django.db.models.functions import Cast, Coalesce, TruncDay, TruncHour, TruncMonth
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -9,15 +11,69 @@ from .serializers import SensorReadingSerializer
 from apps.alerts.utils import create_alert
 
 
-def _aggregate(qs):
-    """Turn a queryset of SensorReadings into the chart-ready dict."""
-    labels, soap, water, washed, unwashed = [], [], [], [], []
-    for r in qs:
-        labels.append(r.date.strftime('%b %d').replace(' 0', ' ') if hasattr(r.date, 'strftime') else str(r.date))
-        soap.append(round(r.soap_usage, 2))
-        water.append(round(r.water_usage, 2))
-        washed.append(r.handwashes)
-        unwashed.append(r.unwashed)
+def _parse_iso(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return datetime.strptime(value, '%Y-%m-%d')
+
+
+def _coalesced_timestamp(qs):
+    return qs.annotate(ts=Coalesce('timestamp', Cast('date', DateTimeField())))
+
+
+def _aggregate(qs, resolution='day'):
+    """Aggregate sensor values for the requested time bucket."""
+    qs = _coalesced_timestamp(qs)
+    if resolution == 'hour':
+        rows = (
+            qs.annotate(period=TruncHour('ts'))
+              .values('period')
+              .annotate(
+                  soap_usage=Sum('soap_usage'),
+                  water_usage=Sum('water_usage'),
+                  handwashes=Sum('handwashes'),
+                  unwashed=Sum('unwashed'),
+              )
+              .order_by('period')
+        )
+        labels = [r['period'].strftime('%H:%M') for r in rows]
+    elif resolution == 'month':
+        rows = (
+            qs.annotate(period=TruncMonth('ts'))
+              .values('period')
+              .annotate(
+                  soap_usage=Sum('soap_usage'),
+                  water_usage=Sum('water_usage'),
+                  handwashes=Sum('handwashes'),
+                  unwashed=Sum('unwashed'),
+              )
+              .order_by('period')
+        )
+        labels = [r['period'].strftime('%b') for r in rows]
+    else:
+        rows = (
+            qs.annotate(period=TruncDay('ts'))
+              .values('period')
+              .annotate(
+                  soap_usage=Sum('soap_usage'),
+                  water_usage=Sum('water_usage'),
+                  handwashes=Sum('handwashes'),
+                  unwashed=Sum('unwashed'),
+              )
+              .order_by('period')
+        )
+        labels = [r['period'].strftime('%b %d').replace(' 0', ' ') for r in rows]
+
+    soap, water, washed, unwashed = [], [], [], []
+    for r in rows:
+        soap.append(round(r['soap_usage'] or 0, 2))
+        water.append(round(r['water_usage'] or 0, 2))
+        washed.append(r['handwashes'] or 0)
+        unwashed.append(r['unwashed'] or 0)
+
     return {
         'labels': labels,
         'soapUsage': soap,
@@ -27,50 +83,76 @@ def _aggregate(qs):
     }
 
 
+def _resolve_resolution(qs, from_dt, to_dt, requested='auto'):
+    if requested == 'daily':
+        return 'day'
+    if requested == 'hourly':
+        return 'hour'
+    if requested == 'month':
+        return 'month'
+    if requested != 'auto':
+        return 'day'
+
+    if qs.filter(timestamp__isnull=False).exists() and (to_dt - from_dt) <= timedelta(days=2):
+        return 'hour'
+    return 'day'
+
+
+def _build_range_response(from_dt, to_dt, resolution='auto'):
+    if isinstance(from_dt, date) and not isinstance(from_dt, datetime):
+        from_dt = datetime.combine(from_dt, time.min)
+    if isinstance(to_dt, date) and not isinstance(to_dt, datetime):
+        to_dt = datetime.combine(to_dt, time.max)
+
+    qs = SensorReading.objects.filter(
+        Q(timestamp__range=(from_dt, to_dt)) |
+        Q(timestamp__isnull=True, date__range=(from_dt.date(), to_dt.date()))
+    )
+
+    bucket = _resolve_resolution(qs, from_dt, to_dt, resolution)
+    response = _aggregate(qs, bucket)
+    response['resolution'] = bucket
+    response['range'] = f"{from_dt.strftime('%b %d').replace(' 0', ' ')} – {to_dt.strftime('%b %d').replace(' 0', ' ')}"
+    return response
+
+
+@api_view(['GET'])
+def analytics_auto(request):
+    now = timezone.now()
+    start = now - timedelta(hours=3)
+    recent_qs = SensorReading.objects.filter(timestamp__range=(start, now))
+    if recent_qs.exists():
+        response = _aggregate(recent_qs, 'hour')
+        response['resolution'] = 'hour'
+        response['range'] = 'Last 3 hours'
+        return Response(response)
+
+    today = timezone.localdate()
+    start_date = today - timedelta(days=6)
+    qs = SensorReading.objects.filter(
+        Q(timestamp__range=(datetime.combine(start_date, time.min), now)) |
+        Q(timestamp__isnull=True, date__range=(start_date, today))
+    )
+    response = _aggregate(qs, 'day')
+    response['resolution'] = 'day'
+    response['range'] = 'Last 7 days'
+    return Response(response)
+
+
 @api_view(['GET'])
 def analytics_week(request):
-    today = date.today()
+    today = timezone.localdate()
     start = today - timedelta(days=6)
-    qs = SensorReading.objects.filter(date__range=(start, today))
-    return Response(_aggregate(qs))
+    response = _build_range_response(start, today, request.query_params.get('resolution', 'auto'))
+    return Response(response)
 
 
 @api_view(['GET'])
 def analytics_month(request):
-    today = date.today()
+    today = timezone.localdate()
     start = date(today.year, 1, 1)
-    from django.db.models.functions import TruncMonth
-    from django.db.models import Avg
-
-    rows = (
-        SensorReading.objects
-        .filter(date__range=(start, today))
-        .annotate(month=TruncMonth('date'))
-        .values('month')
-        .annotate(
-            soap_usage=Sum('soap_usage'),
-            water_usage=Sum('water_usage'),
-            handwashes=Sum('handwashes'),
-            unwashed=Sum('unwashed'),
-        )
-        .order_by('month')
-    )
-
-    labels, soap, water, washed, unw = [], [], [], [], []
-    for r in rows:
-        labels.append(r['month'].strftime('%b'))
-        soap.append(round(r['soap_usage'] or 0, 2))
-        water.append(round(r['water_usage'] or 0, 2))
-        washed.append(r['handwashes'] or 0)
-        unw.append(r['unwashed'] or 0)
-
-    return Response({
-        'labels': labels,
-        'soapUsage': soap,
-        'waterUsage': water,
-        'handwashes': washed,
-        'unwashed': unw,
-    })
+    response = _build_range_response(start, today, request.query_params.get('resolution', 'auto'))
+    return Response(response)
 
 
 @api_view(['GET'])
@@ -79,8 +161,18 @@ def analytics_range(request):
     to_date = request.query_params.get('to')
     if not from_date or not to_date:
         return Response({'error': 'from and to query params required.'}, status=status.HTTP_400_BAD_REQUEST)
-    qs = SensorReading.objects.filter(date__range=(from_date, to_date))
-    return Response(_aggregate(qs))
+
+    try:
+        from_dt = _parse_iso(from_date)
+        to_dt = _parse_iso(to_date)
+    except ValueError:
+        return Response({'error': 'Invalid from/to format.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if from_dt > to_dt:
+        from_dt, to_dt = to_dt, from_dt
+
+    response = _build_range_response(from_dt, to_dt, request.query_params.get('resolution', 'auto'))
+    return Response(response)
 
 
 @api_view(['POST'])
@@ -99,21 +191,39 @@ def iot_ingest(request):
     """
     serializer = SensorReadingSerializer(data=request.data)
     if serializer.is_valid():
-        obj, created = SensorReading.objects.update_or_create(
-            date=serializer.validated_data['date'],
-            device=serializer.validated_data['device'],
-            defaults={
-                'soap_usage': serializer.validated_data['soap_usage'],
-                'water_usage': serializer.validated_data['water_usage'],
-                'handwashes': serializer.validated_data['handwashes'],
-                'unwashed': serializer.validated_data['unwashed'],
-            }
-        )
+        timestamp = serializer.validated_data.get('timestamp')
+        date_value = serializer.validated_data.get('date') or (timestamp.date() if timestamp else None)
+        device_name = serializer.validated_data['device']
 
-        soap  = serializer.validated_data['soap_usage']
+        if not date_value:
+            return Response({'error': 'date or timestamp required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if timestamp:
+            obj = SensorReading.objects.create(
+                date= date_value,
+                timestamp=timestamp,
+                device=device_name,
+                soap_usage=serializer.validated_data['soap_usage'],
+                water_usage=serializer.validated_data['water_usage'],
+                handwashes=serializer.validated_data['handwashes'],
+                unwashed=serializer.validated_data['unwashed'],
+            )
+            created = True
+        else:
+            obj, created = SensorReading.objects.update_or_create(
+                date=date_value,
+                device=device_name,
+                defaults={
+                    'soap_usage': serializer.validated_data['soap_usage'],
+                    'water_usage': serializer.validated_data['water_usage'],
+                    'handwashes': serializer.validated_data['handwashes'],
+                    'unwashed': serializer.validated_data['unwashed'],
+                }
+            )
+
+        soap = serializer.validated_data['soap_usage']
         water = serializer.validated_data['water_usage']
         unwashed = serializer.validated_data['unwashed']
-        device_name = serializer.validated_data['device']
 
         if soap < 0.3:
             create_alert(

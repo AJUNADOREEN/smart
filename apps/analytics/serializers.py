@@ -3,9 +3,12 @@ from .models import SensorReading
 
 
 class SensorReadingSerializer(serializers.ModelSerializer):
+    timestamp = serializers.DateTimeField(required=False, allow_null=True)
+    date = serializers.DateField(required=False)
+
     class Meta:
         model = SensorReading
-        fields = ['id', 'date', 'device', 'soap_usage', 'water_usage', 'handwashes', 'unwashed']
+        fields = ['id', 'timestamp', 'date', 'device', 'soap_usage', 'water_usage', 'handwashes', 'unwashed']
 
 
 class AnalyticsSerializer(serializers.Serializer):
