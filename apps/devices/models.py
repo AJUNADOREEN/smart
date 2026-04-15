@@ -21,6 +21,13 @@ ICON_CHOICES = [
     ('faToggleOn',        'Relay Module'),
     ('faDisplay',         'Display Module'),
     ('faMusic',           'MP3 Player Module'),
+    ('faSatelliteDish',   'IR Sensor'),
+    ('faWaveSquare',      'Ultrasonic Sensor'),
+    ('faPlug',            'Submersible Pump'),
+    ('faSlidersH',        'Relay Module'),
+    ('faBatteryFull',     'Battery'),
+    ('faTv',              'OLED Display'),
+    ('faVolumeDown',      'Mini Speaker'),
 ]
 
 STATUS_CHOICES = [
