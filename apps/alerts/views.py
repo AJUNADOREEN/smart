@@ -10,13 +10,15 @@ class AlertList(generics.ListCreateAPIView):
     serializer_class = AlertSerializer
 
     def get_queryset(self):
-        queryset = Alert.objects.filter(dismissed=False)
         severity = self.request.query_params.get('severity', None)
         status_param = self.request.query_params.get('status', None)
+        if status_param:
+            queryset = Alert.objects.filter(status=status_param, dismissed=False)
+        else:
+            queryset = Alert.objects.filter(status='active', dismissed=False)
+
         if severity:
             queryset = queryset.filter(severity=severity)
-        if status_param:
-            queryset = queryset.filter(status=status_param)
         return queryset
 
 
@@ -31,14 +33,14 @@ def mark_read(request, pk):
         alert = Alert.objects.get(pk=pk)
     except Alert.DoesNotExist:
         return Response({'error': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
-    alert.dismissed = True
-    alert.save(update_fields=['dismissed'])
+    alert.status = 'resolved'
+    alert.save(update_fields=['status'])
     return Response({'ok': True})
 
 
 @api_view(['PATCH'])
 def mark_all_read(request):
-    Alert.objects.filter(dismissed=False, status='active').update(dismissed=True)
+    Alert.objects.filter(status='active', dismissed=False).update(status='resolved')
     return Response({'ok': True})
 
 
