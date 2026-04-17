@@ -55,6 +55,9 @@ def system_power_view(request):
     obj.system_online = new_state
     obj.save(update_fields=['system_online'])
 
+    if not new_state:
+        Device.objects.all().update(status='Offline')
+
     create_alert(
         title    = 'System Powered On' if new_state else 'System Powered Off',
         device   = 'Dashboard',

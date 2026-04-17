@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from .models import Device, DeviceSensorReading
 from .serializers import DeviceSerializer, DeviceDetailSerializer, DeviceSensorReadingSerializer
 from apps.alerts.utils import create_alert
+from apps.settings_app.models import SystemSettings
 
 
 class DeviceList(generics.ListCreateAPIView):
@@ -30,6 +31,10 @@ def iot_ingest(request, device_id):
     temperature = data.get('temperature')
     new_status  = data.get('status')
     battery     = data.get('battery')
+
+    # Override status when the entire system is offline.
+    if not SystemSettings.get().system_online:
+      new_status = 'Offline'
 
     DeviceSensorReading.objects.create(
         device      = device,
