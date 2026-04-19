@@ -181,32 +181,6 @@ def analytics_auto(request):
         'unwashed': unwashed,
         'resolution': 'minute',
         'range': 'Last 3 minutes',
-    }=Sum('unwashed'))['u'] or 0
-
-        minutes_data.append({
-            'period': current_minute,
-            'soap_usage': soap,
-            'water_usage': water,
-            'handwashes': handwashes,
-            'unwashed': unwashed,
-        })
-        current_minute += timedelta(minutes=1)
-
-    # Build response
-    labels = [m['period'].strftime('%H:%M') for m in minutes_data]
-    soap_usage = [round(m['soap_usage'], 2) for m in minutes_data]
-    water_usage = [round(m['water_usage'], 2) for m in minutes_data]
-    handwashes = [m['handwashes'] for m in minutes_data]
-    unwashed = [m['unwashed'] for m in minutes_data]
-
-    response = {
-        'labels': labels,
-        'soapUsage': soap_usage,
-        'waterUsage': water_usage,
-        'handwashes': handwashes,
-        'unwashed': unwashed,
-        'resolution': 'minute',
-        'range': 'Last 3 minutes',
     }
     return Response(response)
 
