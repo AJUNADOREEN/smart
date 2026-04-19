@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 from django.utils import timezone
 from django.db.models import Avg, Sum
+from django.db.models.functions import TruncHour
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
@@ -127,19 +128,25 @@ def alert_list(request):
 def activity_waveform(request):
     now   = timezone.localtime()
     today = now.date()
-    readings = (
-        DeviceSensorReading.objects
+    # Aggregate handwashes per hour from SensorReading
+    hourly_data = (
+        SensorReading.objects
         .filter(timestamp__date=today)
-        .values_list('timestamp', flat=True)
+        .annotate(hour=TruncHour('timestamp'))
+        .values('hour')
+        .annotate(total_handwashes=Sum('handwashes'))
+        .order_by('hour')
     )
-    # bucket into hours 0-23
-    buckets = [0] * 24
-    for ts in readings:
-        buckets[timezone.localtime(ts).hour] += 1
 
-    # return only hours that have passed so far
+    # Create buckets for all hours up to current
     current_hour = now.hour
+    buckets = [0] * (current_hour + 1)
+    for data in hourly_data:
+        hour = data['hour'].hour
+        if hour <= current_hour:
+            buckets[hour] = data['total_handwashes'] or 0
+
     hours  = [f"{h % 12 or 12}{'am' if h < 12 else 'pm'}" for h in range(current_hour + 1)]
-    values = buckets[:current_hour + 1]
+    values = buckets
     return Response({'hours': hours, 'values': values})
 
