@@ -139,12 +139,12 @@ def _build_range_response(from_dt, to_dt, resolution='auto'):
 @permission_classes([])
 def analytics_auto(request):
     now = timezone.now()
-    start = now - timedelta(minutes=1)
+    start = now - timedelta(minutes=3)
     recent_qs = SensorReading.objects.filter(timestamp__range=(start, now))
     if recent_qs.exists():
         response = _aggregate(recent_qs, 'minute')
         response['resolution'] = 'minute'
-        response['range'] = 'Last 1 minute'
+        response['range'] = 'Last 3 minutes'
         return Response(response)
 
     today = timezone.localdate()
