@@ -1,5 +1,5 @@
 from rest_framework import generics, status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.response import Response
 
 from .models import Device, DeviceSensorReading
@@ -19,6 +19,8 @@ class DeviceDetail(generics.RetrieveAPIView):
 
 
 @api_view(['POST'])
+@authentication_classes([])
+@permission_classes([])
 def iot_ingest(request, device_id):
     try:
         device = Device.objects.get(pk=device_id)
@@ -120,6 +122,8 @@ def iot_ingest(request, device_id):
 
 
 @api_view(['PATCH'])
+@authentication_classes([])
+@permission_classes([])
 def update_status(request, device_id):
     try:
         device = Device.objects.get(pk=device_id)

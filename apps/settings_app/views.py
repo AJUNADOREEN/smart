@@ -1,5 +1,5 @@
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
 import json
@@ -24,7 +24,6 @@ def _resolve_user(request):
     return None
 
 
-# Map device icons to power groups
 def _device_group(device):
     sensors = {'faEye', 'faWater', 'faTemperatureHalf'}
     boards  = {'faToggleOn', 'faServer', 'faDisplay', 'faMicrochip'}
@@ -35,29 +34,28 @@ def _device_group(device):
     return 'devices'
 
 
-@csrf_exempt
 @api_view(['GET', 'PUT', 'PATCH'])
+@authentication_classes([])
+@permission_classes([])
 def settings_view(request):
     obj = SystemSettings.get()
     if request.method == 'GET':
         return Response(SystemSettingsSerializer(obj).data)
-
     serializer = SystemSettingsSerializer(obj, data=request.data, partial=request.method == 'PATCH')
     if serializer.is_valid():
         serializer.save()
         create_alert(
-            title    = 'System Settings Updated',
-            device   = 'Dashboard',
-            message  = 'System settings were saved from the Settings page.',
-            severity = 'Low',
-            location = 'Dashboard',
+            title='System Settings Updated', device='Dashboard',
+            message='System settings were saved from the Settings page.',
+            severity='Low', location='Dashboard',
         )
         return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@csrf_exempt
 @api_view(['GET', 'PATCH'])
+@authentication_classes([])
+@permission_classes([])
 def system_power_view(request):
     obj = SystemSettings.get()
     if request.method == 'GET':
@@ -78,39 +76,35 @@ def system_power_view(request):
         Device.objects.all().update(status='Offline')
 
     create_alert(
-        title    = 'System Powered On' if new_state else 'System Powered Off',
-        device   = 'Dashboard',
-        message  = f'System was remotely {"activated" if new_state else "shut down"} from Settings.',
-        severity = 'Low' if new_state else 'High',
-        location = 'Settings',
+        title='System Powered On' if new_state else 'System Powered Off',
+        device='Dashboard',
+        message=f'System was remotely {"activated" if new_state else "shut down"} from Settings.',
+        severity='Low' if new_state else 'High',
+        location='Settings',
     )
     return Response({'system_online': obj.system_online})
 
 
-@csrf_exempt
 @api_view(['GET'])
+@authentication_classes([])
+@permission_classes([])
 def power_devices_list(request):
     system_online = SystemSettings.get().system_online
     devices = Device.objects.all()
-    return Response([
-        {
-            'id':       d.id,
-            'name':     d.name,
-            'group':    _device_group(d),
-            'status':   (d.status == 'Online') if system_online else False,
-            'location': d.location,
-        }
-        for d in devices
-    ])
+    return Response([{
+        'id': d.id, 'name': d.name, 'group': _device_group(d),
+        'status': (d.status == 'Online') if system_online else False,
+        'location': d.location,
+    } for d in devices])
 
 
-@csrf_exempt
 @api_view(['PATCH'])
+@authentication_classes([])
+@permission_classes([])
 def power_device_toggle(request, pk):
     acting = _resolve_user(request)
     if not acting or not acting.is_staff:
         return Response({'error': 'Only staff users can change device power status.'}, status=status.HTTP_403_FORBIDDEN)
-
     try:
         device = Device.objects.get(pk=pk)
     except Device.DoesNotExist:
@@ -127,20 +121,14 @@ def power_device_toggle(request, pk):
     if device.status != old_status:
         if new_status:
             create_alert(
-                title    = 'Device Powered On',
-                device   = device.name,
-                message  = f'{device.name} was powered on from the Settings panel.',
-                severity = 'Low',
-                location = device.location,
-                status   = 'resolved',
+                title='Device Powered On', device=device.name,
+                message=f'{device.name} was powered on from the Settings panel.',
+                severity='Low', location=device.location, status='resolved',
             )
         else:
             create_alert(
-                title    = 'Device Powered Off',
-                device   = device.name,
-                message  = f'{device.name} was powered off from the Settings panel.',
-                severity = 'Medium',
-                location = device.location,
+                title='Device Powered Off', device=device.name,
+                message=f'{device.name} was powered off from the Settings panel.',
+                severity='Medium', location=device.location,
             )
-
     return Response({'id': device.id, 'name': device.name, 'group': _device_group(device), 'status': device.status == 'Online'})

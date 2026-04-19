@@ -1,5 +1,5 @@
 from rest_framework import generics, status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.response import Response
 from .models import Alert
 from .serializers import AlertSerializer
@@ -28,6 +28,8 @@ class AlertDetail(generics.RetrieveUpdateDestroyAPIView):
 
 
 @api_view(['PATCH'])
+@authentication_classes([])
+@permission_classes([])
 def mark_read(request, pk):
     try:
         alert = Alert.objects.get(pk=pk)
@@ -39,12 +41,16 @@ def mark_read(request, pk):
 
 
 @api_view(['PATCH'])
+@authentication_classes([])
+@permission_classes([])
 def mark_all_read(request):
     Alert.objects.filter(status='active', dismissed=False).update(status='resolved')
     return Response({'ok': True})
 
 
 @api_view(['GET'])
+@authentication_classes([])
+@permission_classes([])
 def alert_counts(request):
     high   = Alert.objects.filter(severity='High',   status='active', dismissed=False).count()
     medium = Alert.objects.filter(severity='Medium', status='active', dismissed=False).count()

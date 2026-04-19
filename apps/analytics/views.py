@@ -3,7 +3,7 @@ from django.db.models import Sum, Q, DateTimeField
 from django.db.models.functions import Cast, Coalesce, TruncDay, TruncHour, TruncMonth
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.response import Response
 
 from .models import SensorReading
@@ -117,6 +117,8 @@ def _build_range_response(from_dt, to_dt, resolution='auto'):
 
 
 @api_view(['GET'])
+@authentication_classes([])
+@permission_classes([])
 def analytics_auto(request):
     now = timezone.now()
     start = now - timedelta(hours=3)
@@ -140,6 +142,8 @@ def analytics_auto(request):
 
 
 @api_view(['GET'])
+@authentication_classes([])
+@permission_classes([])
 def analytics_week(request):
     today = timezone.localdate()
     start = today - timedelta(days=6)
@@ -148,6 +152,8 @@ def analytics_week(request):
 
 
 @api_view(['GET'])
+@authentication_classes([])
+@permission_classes([])
 def analytics_month(request):
     today = timezone.localdate()
     start = date(today.year, 1, 1)
@@ -156,6 +162,8 @@ def analytics_month(request):
 
 
 @api_view(['GET'])
+@authentication_classes([])
+@permission_classes([])
 def analytics_range(request):
     from_date = request.query_params.get('from')
     to_date = request.query_params.get('to')
@@ -176,6 +184,8 @@ def analytics_range(request):
 
 
 @api_view(['POST'])
+@authentication_classes([])
+@permission_classes([])
 def iot_ingest(request):
     """
     IoT devices POST readings here.
