@@ -219,35 +219,24 @@ def iot_ingest(request):
     """
     serializer = SensorReadingSerializer(data=request.data)
     if serializer.is_valid():
-        timestamp = serializer.validated_data.get('timestamp')
-        date_value = serializer.validated_data.get('date') or (timestamp.date() if timestamp else None)
+        timestamp = serializer.validated_data.get('timestamp') or timezone.now()
+        date_value = serializer.validated_data.get('date') or timestamp.date()
         device_name = serializer.validated_data['device']
 
         if not date_value:
             return Response({'error': 'date or timestamp required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if timestamp:
-            obj = SensorReading.objects.create(
-                date= date_value,
-                timestamp=timestamp,
-                device=device_name,
-                soap_usage=serializer.validated_data['soap_usage'],
-                water_usage=serializer.validated_data['water_usage'],
-                handwashes=serializer.validated_data['handwashes'],
-                unwashed=serializer.validated_data['unwashed'],
-            )
-            created = True
-        else:
-            obj, created = SensorReading.objects.update_or_create(
-                date=date_value,
-                device=device_name,
-                defaults={
-                    'soap_usage': serializer.validated_data['soap_usage'],
-                    'water_usage': serializer.validated_data['water_usage'],
-                    'handwashes': serializer.validated_data['handwashes'],
-                    'unwashed': serializer.validated_data['unwashed'],
-                }
-            )
+        obj, created = SensorReading.objects.update_or_create(
+            date=date_value,
+            device=device_name,
+            defaults={
+                'timestamp': timestamp,
+                'soap_usage': serializer.validated_data['soap_usage'],
+                'water_usage': serializer.validated_data['water_usage'],
+                'handwashes': serializer.validated_data['handwashes'],
+                'unwashed': serializer.validated_data['unwashed'],
+            }
+        )
 
         soap = serializer.validated_data['soap_usage']
         water = serializer.validated_data['water_usage']
