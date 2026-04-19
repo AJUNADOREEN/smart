@@ -2,11 +2,26 @@ from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
+import json
 
 from .models import SystemSettings
 from .serializers import SystemSettingsSerializer
 from apps.devices.models import Device
 from apps.alerts.utils import create_alert
+from django.contrib.auth.models import User
+
+
+def _resolve_user(request):
+    if request.user.is_authenticated:
+        return request.user
+    try:
+        body = json.loads(request.body or '{}')
+        username = body.get('requester', '').strip()
+        if username:
+            return User.objects.filter(username=username, is_active=True).first()
+    except Exception:
+        pass
+    return None
 
 
 # Map device icons to power groups
@@ -48,6 +63,10 @@ def system_power_view(request):
     if request.method == 'GET':
         return Response({'system_online': obj.system_online})
 
+    acting = _resolve_user(request)
+    if not acting or not acting.is_superuser:
+        return Response({'error': 'Only a superadmin can toggle system power.'}, status=status.HTTP_403_FORBIDDEN)
+
     new_state = request.data.get('system_online')
     if new_state is None:
         return Response({'error': 'system_online required.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -71,13 +90,14 @@ def system_power_view(request):
 @csrf_exempt
 @api_view(['GET'])
 def power_devices_list(request):
+    system_online = SystemSettings.get().system_online
     devices = Device.objects.all()
     return Response([
         {
-            'id':     d.id,
-            'name':   d.name,
-            'group':  _device_group(d),
-            'status': d.status == 'Online',
+            'id':       d.id,
+            'name':     d.name,
+            'group':    _device_group(d),
+            'status':   (d.status == 'Online') if system_online else False,
             'location': d.location,
         }
         for d in devices
@@ -87,6 +107,10 @@ def power_devices_list(request):
 @csrf_exempt
 @api_view(['PATCH'])
 def power_device_toggle(request, pk):
+    acting = _resolve_user(request)
+    if not acting or not acting.is_staff:
+        return Response({'error': 'Only staff users can change device power status.'}, status=status.HTTP_403_FORBIDDEN)
+
     try:
         device = Device.objects.get(pk=pk)
     except Device.DoesNotExist:

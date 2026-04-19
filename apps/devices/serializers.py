@@ -9,12 +9,16 @@ class DeviceSensorReadingSerializer(serializers.ModelSerializer):
 
 
 class DeviceSerializer(serializers.ModelSerializer):
-    last_active   = serializers.DateTimeField(format='%I:%M %p', read_only=True)
+    last_active    = serializers.DateTimeField(format='%I:%M %p', read_only=True)
     latest_reading = serializers.SerializerMethodField()
+    wifi           = serializers.SerializerMethodField()
 
     class Meta:
         model  = Device
-        fields = ['id', 'name', 'location', 'status', 'battery', 'icon', 'color', 'last_active', 'wired', 'latest_reading']
+        fields = ['id', 'name', 'location', 'status', 'battery', 'icon', 'color', 'last_active', 'wired', 'wifi', 'latest_reading']
+
+    def get_wifi(self, obj):
+        return getattr(obj, 'wifi', False)
 
     def get_latest_reading(self, obj):
         r = obj.readings.first()
@@ -24,13 +28,17 @@ class DeviceSerializer(serializers.ModelSerializer):
 
 
 class DeviceDetailSerializer(serializers.ModelSerializer):
-    last_active   = serializers.DateTimeField(format='%I:%M %p', read_only=True)
+    last_active    = serializers.DateTimeField(format='%I:%M %p', read_only=True)
     latest_reading = serializers.SerializerMethodField()
     history        = serializers.SerializerMethodField()
+    wifi           = serializers.SerializerMethodField()
 
     class Meta:
         model  = Device
-        fields = ['id', 'name', 'location', 'status', 'battery', 'icon', 'color', 'last_active', 'wired', 'latest_reading', 'history']
+        fields = ['id', 'name', 'location', 'status', 'battery', 'icon', 'color', 'last_active', 'wired', 'wifi', 'latest_reading', 'history']
+
+    def get_wifi(self, obj):
+        return getattr(obj, 'wifi', False)
 
     def get_latest_reading(self, obj):
         r = obj.readings.first()

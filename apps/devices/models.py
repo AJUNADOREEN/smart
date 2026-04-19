@@ -46,6 +46,7 @@ class Device(models.Model):
     color       = models.CharField(max_length=16, default=random_device_color)
     last_active = models.DateTimeField(auto_now=True)
     wired       = models.BooleanField(default=False)
+    wifi        = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.name} ({self.status})"

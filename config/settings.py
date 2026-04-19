@@ -69,16 +69,17 @@ CSRF_TRUSTED_ORIGINS = [
     'https://web-production-2c36d.up.railway.app',
     'https://ssemujjusharif567-cmd.github.io',
 ]
-SESSION_COOKIE_SAMESITE = os.environ.get('SESSION_COOKIE_SAMESITE', 'Lax')
 SESSION_COOKIE_HTTPONLY = True
-CSRF_COOKIE_SAMESITE = os.environ.get('CSRF_COOKIE_SAMESITE', 'Lax')
 
-if not DEBUG:
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SESSION_COOKIE_SAMESITE = 'None'
-    CSRF_COOKIE_SAMESITE = 'None'
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# Cross-origin cookie support
+# Force SameSite=None+Secure whenever a DATABASE_URL is set (i.e. on Railway)
+# or when DEBUG is explicitly False — whichever comes first.
+_is_production = bool(os.environ.get('DATABASE_URL')) or not DEBUG
+SESSION_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SAMESITE    = 'None'
+SESSION_COOKIE_SECURE   = _is_production
+CSRF_COOKIE_SECURE      = _is_production
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
